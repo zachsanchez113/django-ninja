@@ -35,9 +35,19 @@ __all__ = [
 
 
 def get_typed_signature(call: Callable) -> inspect.Signature:
-    "Finds call signature and resolves all forwardrefs"
+    """Finds call signature and resolves all forwardrefs"""
     signature = inspect.signature(call)
     globalns = getattr(call, "__globals__", {})
+
+    # If the function has been decorated with a utility from Django Ninja, e.g. `@paginate`, then the global
+    # namespace will be from Django Ninja instead of the original project. If this isn't accounted for, then
+    # type annotations containing forward references will fail to resolve.
+    if hasattr(call, "__wrapped__"):
+        module_name = globalns.get("__name__") or ""
+
+        if re.match(r"^ninja\..*", module_name):
+            globalns = getattr(call.__wrapped__, "__globals__", {})  # type: ignore[attr-defined]
+
     typed_params = [
         inspect.Parameter(
             name=param.name,
@@ -80,7 +90,7 @@ def has_kwargs(func: Callable) -> bool:
 
 
 def get_args_names(func: Callable) -> List[str]:
-    "returns list of function argument names"
+    """returns list of function argument names"""
     return list(inspect.signature(func).parameters.keys())
 
 
